@@ -1,61 +1,75 @@
-// Is file ko run karne ke liye: node server.js
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const bodyParser = require('body-parser');
+// backend/server.js
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
+require('dotenv').config(); // 👈 VERY IMPORTANT (top line)
+
 
 const app = express();
-app.use(cors());
-app.use(bodyParser.json());
 
-// REPLACE WITH YOUR MONGODB URL
-const MONGO_URI = "mongodb+srv://admin:MohitClassCa0123456789@classca.e1gprqt.mongodb.net/classca?appName=ClassCa";
+// ---------- Middlewares ----------
+app.use(cors({ origin: "*" }));
+app.use(express.json());
 
-mongoose.connect(MONGO_URI)
+// ---------- MongoDB ----------
+const MONGO_URI = process.env.MONGO_URI;
+
+if (!MONGO_URI) {
+    throw new Error("MONGO_URI not defined");
+}
+
+mongoose
+    .connect(MONGO_URI)
     .then(() => console.log("MongoDB Connected"))
-    .catch(err => console.log(err));
+    .catch((err) => {
+        console.error("Mongo Error:", err);
+        throw err;
+    });
 
-// Schema
+// ---------- Schema ----------
 const UserSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     name: String,
     userid: String,
-    timetable: Array, // [{day: 'Mon', subject: 'Math', time: '10:00'}]
-    attendance: Object, // { "recordId": ["present", "absent"] }
+    timetable: Array,
+    attendance: Object,
     dailyActions: Object,
     biometric: { type: Number, default: 0 },
-    examDate: String
+    examDate: String,
 });
 
-const User = mongoose.model('User', UserSchema);
+const User =
+    mongoose.models.User || mongoose.model("User", UserSchema);
 
-// Routes
-app.post('/register', async (req, res) => {
-    const { name, email, userid, password } = req.body;
+// ---------- Routes ----------
+app.get("/", (req, res) => {
+    res.send("Class-CA API Running");
+});
+
+app.post("/register", async (req, res) => {
     try {
-        const newUser = new User({ name, email, userid, password, timetable: [], attendance: {}, dailyActions: {}, biometric: 0 });
-        await newUser.save();
-        res.json({ success: true, user: newUser });
-    } catch (e) { res.status(400).json({ error: e.message }); }
+        const user = new User(req.body);
+        await user.save();
+        res.json({ success: true, user });
+    } catch (e) {
+        res.status(400).json({ success: false, error: e.message });
+    }
 });
 
-app.post('/login', async (req, res) => {
+app.post("/login", async (req, res) => {
     const { userid, password } = req.body;
     const user = await User.findOne({ userid, password });
     if (user) res.json({ success: true, user });
-    else res.status(400).json({ success: false, message: "Invalid credentials" });
+    else res.status(400).json({ success: false });
 });
 
-app.post('/sync', async (req, res) => {
-    const { email, data } = req.body; // data contains timetable, attendance, etc.
+app.post("/sync", async (req, res) => {
+    const { email, data } = req.body;
     await User.findOneAndUpdate({ email }, data);
     res.json({ success: true });
 });
 
-
-
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-
-module.exports = app; 
+// ❌ NO app.listen()
+// ✅ Vercel needs only export
+module.exports = app;
